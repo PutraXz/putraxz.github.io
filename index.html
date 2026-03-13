@@ -1,11 +1,269 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>My Audio</title>
+<meta charset="UTF-8">
+<title>CPM Calculator</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+body{
+font-family:Arial;
+background:#f5f5f5;
+padding:20px;
+}
+
+table{
+border-collapse:collapse;
+width:100%;
+background:white;
+}
+
+th,td{
+border:1px solid #ccc;
+padding:8px;
+text-align:center;
+}
+
+button{
+padding:10px;
+margin:5px;
+}
+
+input{
+width:90%;
+}
+</style>
+
 </head>
 <body>
-<iframe id="ytplayer" type="text/html" width="640" height="360"
-  src="https://www.youtube.com/embed/JDQnMDJYtHk?autoplay=1"
-  frameborder="0"></iframe>
+
+<h2>CPM Calculator</h2>
+
+<table id="taskTable">
+<tr>
+<th>Task</th>
+<th>ET</th>
+<th>Pred 1</th>
+<th>Pred 2</th>
+</tr>
+</table>
+
+<button onclick="addRow()">Tambah Task</button>
+<button onclick="hitung()">Hitung</button>
+
+<h3>Hasil</h3>
+<pre id="output"></pre>
+<h3>Network Diagram</h3>
+<div id="network" style="height:400px;border:1px solid #ccc;background:white"></div>
+<script>
+
+function drawNetwork(tasks,TE,TL,slack){
+
+let nodes=[]
+let edges=[]
+
+for(let t in tasks){
+
+let color = slack[t]==0 ? "#ff6b6b" : "#97c2fc"
+
+nodes.push({
+id:t,
+label:"TE:"+TE[t]+"\n"+t+"\nTL:"+TL[t],
+shape:"box",
+color:{
+background:color,
+border:"#333"
+},
+font:{align:"center"}
+})
+
+for(let p of tasks[t].pred){
+
+
+let et = tasks[t].dur
+let tl = TL[t]
+let calc = tl - et
+
+edges.push({
+from:p,
+to:t,
+arrows:"to",
+
+label:
+p+" - "+t+
+"\nET:"+et+
+"\nTL:"+tl+"-"+et+"="+calc,
+
+font:{
+align:"middle",
+size:14
+}
+})
+
+}
+
+}
+
+let container=document.getElementById("network")
+
+let data={
+nodes:new vis.DataSet(nodes),
+edges:new vis.DataSet(edges)
+}
+
+let options={
+
+layout:{
+hierarchical:{
+direction:"LR",
+sortMethod:"directed",
+nodeSpacing:150,
+levelSeparation:120
+}
+},
+
+physics:false,
+
+edges:{
+smooth:true,
+font:{
+align:"middle",
+size:14
+}
+}
+
+}
+
+new vis.Network(container,data,options)
+
+}
+
+
+
+function addRow(){
+let table=document.getElementById("taskTable")
+
+let row=table.insertRow()
+
+row.insertCell(0).innerHTML='<input>'
+row.insertCell(1).innerHTML='<input type="number">'
+row.insertCell(2).innerHTML='<input>'
+row.insertCell(3).innerHTML='<input>'
+}
+
+addRow()
+
+function hitung(){
+
+let table=document.getElementById("taskTable")
+let tasks={}
+
+for(let i=1;i<table.rows.length;i++){
+
+let cells=table.rows[i].cells
+
+let t=cells[0].children[0].value.trim()
+let et=parseInt(cells[1].children[0].value)
+
+if(t=="" || isNaN(et)) continue
+
+let p1=cells[2].children[0].value.trim()
+let p2=cells[3].children[0].value.trim()
+
+let preds=[]
+
+if(p1!="") preds.push(p1)
+if(p2!="") preds.push(p2)
+
+tasks[t]={dur:et,pred:preds}
+}
+
+let TE={}
+let EF={}
+
+while(Object.keys(TE).length<Object.keys(tasks).length){
+
+for(let t in tasks){
+
+if(TE[t]) continue
+
+let preds=tasks[t].pred
+
+if(preds.every(p=>TE[p]!=undefined)){
+
+if(preds.length==0)
+TE[t]=0
+else
+TE[t]=Math.max(...preds.map(p=>EF[p]))
+
+EF[t]=TE[t]+tasks[t].dur
+
+}
+}
+
+}
+
+let project=Math.max(...Object.values(EF))
+
+let TL={}
+
+while(Object.keys(TL).length<Object.keys(tasks).length){
+
+for(let t in tasks){
+
+let succ=Object.keys(tasks).filter(x=>tasks[x].pred.includes(t))
+
+if(TL[t]) continue
+
+if(succ.length==0){
+
+TL[t]=project
+
+}
+
+else if(succ.every(s=>TL[s]!=undefined)){
+
+TL[t]=Math.min(...succ.map(s=>TL[s]-tasks[s].dur))
+
+}
+
+}
+
+}
+
+let slack={}
+
+for(let t in tasks){
+
+slack[t]=TL[t]-TE[t]-tasks[t].dur
+
+}
+
+let critical=[]
+
+for(let t in slack)
+if(slack[t]==0)
+critical.push(t)
+
+let text="Durasi Proyek = "+project+"\n\n"
+
+text+="Task | TE | TL | Slack\n"
+text+="-----------------------\n"
+
+for(let t in tasks){
+
+text+=t+" | "+TE[t]+" | "+TL[t]+" | "+slack[t]+"\n"
+
+}
+
+text+="\nCritical Path:\n"
+
+text+=critical.join(" → ")
+
+document.getElementById("output").textContent=text
+drawNetwork(tasks,TE,TL,slack)
+}
+
+</script>
+
 </body>
 </html>
